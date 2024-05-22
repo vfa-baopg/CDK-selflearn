@@ -6,6 +6,7 @@ import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import { S3SnsSqsLambdaChainStack } from './Services/sqs';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -189,6 +190,10 @@ export  class CdkSelflearnStack extends cdk.Stack {
       taskDefinition: webTaskDefinition,
       publicLoadBalancer: true,
       listenerPort: 80
+    });
+
+    new S3SnsSqsLambdaChainStack(this,'MyS3SnsLambda',{
+        s3Bucket: bucket
     });
   }
 }
