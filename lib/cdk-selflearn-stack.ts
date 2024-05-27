@@ -5,6 +5,7 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import { ECSStack } from './cluster-stack';
+import { CloudfrontStack } from './cloudfront-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -15,6 +16,7 @@ export  class CdkSelflearnStack extends cdk.Stack {
     const s3 = new S3Stack(this);
     const ec2 = new EC2Stack(this);
     const ecs = new ECSStack(this, ec2, s3);
+    const cloudfront = new CloudfrontStack(this, s3);
 
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
