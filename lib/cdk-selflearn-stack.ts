@@ -1,35 +1,24 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { S3Stack } from './s3-stack';
+import { EC2Stack } from './ec2-stack';
+import { ECSStack } from './cluster-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
-  public readonly vpc: ec2.Vpc;
   public readonly cluster: ecs.Cluster;
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const s3 = new S3Stack(scope, id, props);
-    // The code that defines your stack goes here
-    // Create a VPC
-    const vpc = new ec2.Vpc(this, 'MyVpc', {
-      maxAzs: 2
-    });
-
-    // Create an ECS cluster
-    const cluster = new ecs.Cluster(this, 'MyCluster', {
-      vpc: vpc
-    });
-
- 
+    const s3 = new S3Stack(this);
+    const ec2 = new EC2Stack(this);
+    const ecs = new ECSStack(this, ec2, s3);
 
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
-      vpc: vpc,
+      vpc: ec2.vpc,
       internetFacing: true
     });
 
@@ -47,73 +36,9 @@ export  class CdkSelflearnStack extends cdk.Stack {
         messageBody: 'Cannot route your request; no matching project found.',
       }),
     });
-    // Define Fargate task definition for API
-    const apiTaskDefinition = new ecs.FargateTaskDefinition(this, 'ApiTaskDef', {
-      memoryLimitMiB: 512,
-      cpu: 256
-    });
-
-    const ApiContainer = apiTaskDefinition.addContainer('ApiContainer', {
-      image: ecs.ContainerImage.fromRegistry('my-api-image'),
-      logging: new ecs.AwsLogDriver({
-        streamPrefix: 'ecs-api'
-      }),
-      portMappings: [{ containerPort: 80 }],
-      environment: {
-        BUCKET_NAME: s3.bucket.bucketName
-      }
-    });
-    apiTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy); 
-    
-    ApiContainer.addPortMappings({
-      containerPort: 80,
-      protocol: ecs.Protocol.TCP
-    });
-    // Define Fargate task definition for Admin
-    const adminTaskDefinition = new ecs.FargateTaskDefinition(this, 'AdminTaskDef', {
-      memoryLimitMiB: 512,
-      cpu: 256
-    });
-
-    const AdminContainer = adminTaskDefinition.addContainer('AdminContainer', {
-      image: ecs.ContainerImage.fromRegistry('my-admin-image'),
-      logging: new ecs.AwsLogDriver({
-        streamPrefix: 'ecs-admin'
-      }),
-      portMappings: [{ containerPort: 80 }],
-      environment: {
-        BUCKET_NAME: s3.bucket.bucketName
-      }
-    });
-    adminTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy);
-    AdminContainer.addPortMappings({
-      containerPort: 80,
-      protocol: ecs.Protocol.TCP
-    });
-    // Define Fargate task definition for Web
-    const webTaskDefinition = new ecs.FargateTaskDefinition(this, 'WebTaskDef', {
-      memoryLimitMiB: 512,
-      cpu: 256
-    });
-
-    const webContainer = webTaskDefinition.addContainer('WebContainer', {
-      image: ecs.ContainerImage.fromRegistry('my-web-image'),
-      logging: new ecs.AwsLogDriver({
-        streamPrefix: 'ecs-web'
-      }),
-      portMappings: [{ containerPort: 80 }],
-      environment: {
-        BUCKET_NAME: s3.bucket.bucketName
-      }
-    });
-    webTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy);
-    webContainer.addPortMappings({
-      containerPort: 80,
-      protocol: ecs.Protocol.TCP
-    });
     // Create target groups for each service
     const apiTargetGroup = new elbv2.ApplicationTargetGroup(this, 'ApiTargetGroup', {
-      vpc: vpc,
+      vpc: ec2.vpc,
       port: 80,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
@@ -123,7 +48,7 @@ export  class CdkSelflearnStack extends cdk.Stack {
     });
 
     const adminTargetGroup = new elbv2.ApplicationTargetGroup(this, 'AdminTargetGroup', {
-      vpc: vpc,
+      vpc: ec2.vpc,
       port: 80,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
@@ -133,7 +58,7 @@ export  class CdkSelflearnStack extends cdk.Stack {
     });
 
     const webTargetGroup = new elbv2.ApplicationTargetGroup(this, 'WebTargetGroup', {
-      vpc: vpc,
+      vpc: ec2.vpc,
       port: 80,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
@@ -159,28 +84,6 @@ export  class CdkSelflearnStack extends cdk.Stack {
       targetGroups: [webTargetGroup],
       conditions: [elbv2.ListenerCondition.pathPatterns(['/*'])],
       priority: 3
-    });
-
-    // Create Fargate services and attach to the target groups
-    new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'ApiService', {
-      cluster: cluster,
-      taskDefinition: apiTaskDefinition,
-      publicLoadBalancer: true,
-      listenerPort: 80,
-    });
-
-    new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'AdminService', {
-      cluster: cluster,
-      taskDefinition: adminTaskDefinition,
-      publicLoadBalancer: true,
-      listenerPort: 80
-    });
-
-    new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'WebService', {
-      cluster: cluster,
-      taskDefinition: webTaskDefinition,
-      publicLoadBalancer: true,
-      listenerPort: 80
     });
   }
 }
