@@ -6,6 +6,12 @@ import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import { ECSStack } from './cluster-stack';
 import { CloudfrontStack } from './cloudfront-stack';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { S3SnsSqsLambdaChainStack } from './Services/sqs';
+import { RDS } from './Services/DB/rds';
+import { IpAddresses } from 'aws-cdk-lib/aws-ec2';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -17,6 +23,37 @@ export  class CdkSelflearnStack extends cdk.Stack {
     const ec2 = new EC2Stack(this);
     const ecs = new ECSStack(this, ec2, s3);
     const cloudfront = new CloudfrontStack(this, s3);
+
+    // The code that defines your stack goes here
+    // Create a VPC
+    const vpc = new ec2.Vpc(this, 'MyVpc', {
+      ipAddresses: IpAddresses.cidr('10.0.0.0/16'),
+      maxAzs: 2,
+      subnetConfiguration: [
+        {
+          cidrMask: 24,
+          name: 'public-1',
+          subnetType: ec2.SubnetType.PUBLIC
+        },
+        {
+          cidrMask: 24,
+          name: 'public-2',
+          subnetType: ec2.SubnetType.PUBLIC
+        },
+        {
+          cidrMask: 28,
+          name: 'private-1',
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+        },
+        {
+          cidrMask: 28,
+          name: 'private-2',
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+        }
+      ]
+    });
+
+    const privateSubnetIds = vpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_NAT });
 
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
@@ -87,28 +124,23 @@ export  class CdkSelflearnStack extends cdk.Stack {
       conditions: [elbv2.ListenerCondition.pathPatterns(['/*'])],
       priority: 3
     });
+
+    //Create RDS 
+    const rds = new RDS(this, 'MyRDSStack', {
+          env:{region:"us-east-1"}, description:"RDS Stack",
+          vpcId:"vpc-aaaaaaaa",
+          dbName:"sampledb",
+          subnetIds: privateSubnetIds.subnetIds,
+          vpc: vpc
+    });
+    
+    // Create a DynamoDB table
+    const table = new dynamodb.Table(this, 'MyTable', {
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sortKey', type: dynamodb.AttributeType.STRING }, // Optional: Include if you need a sort key
+      tableName: 'MyTable',
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // Use PAY_PER_REQUEST or PROVISIONED
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // NOT recommended for production code
+    });
   }
 }
-// const app = new cdk.App();
-
-// const infra = new CdkSelflearnStack(app,'CDKInfra');
-// const splitAtListenerLBStack = new SplitAtListener_LoadBalancerStack(app, 'SplitAtListener-LBStack', {
-//   vpc: infra.vpc,
-// });
-// new SplitAtListener_ServiceStack(app, 'SplitAtListener-ServiceStack', {
-//   cluster: infra.cluster,
-//   vpc: infra.vpc,
-//   loadBalancer: splitAtListenerLBStack.loadBalancer,
-//   containerName: "web"
-// });
-
-
-// const splitAtTargetGroupLBStack = new SplitAtTargetGroup_LoadBalancerStack(app, 'SplitAtTargetGroup-LBStack', {
-//   vpc: infra.vpc,
-// });
-// new SplitAtTargetGroup_ServiceStack(app, 'SplitAtTargetGroup-ServiceStack', {
-//   cluster: infra.cluster,
-//   vpc: infra.vpc,
-//   targetGroup: splitAtTargetGroupLBStack.targetGroup
-// });
-// app.synth();
