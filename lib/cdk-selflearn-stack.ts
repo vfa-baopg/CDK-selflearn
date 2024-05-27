@@ -4,8 +4,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as iam from 'aws-cdk-lib/aws-iam';
+import { S3Stack } from './s3-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -13,6 +12,8 @@ export  class CdkSelflearnStack extends cdk.Stack {
   public readonly cluster: ecs.Cluster;
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    const s3 = new S3Stack(scope, id, props);
     // The code that defines your stack goes here
     // Create a VPC
     const vpc = new ec2.Vpc(this, 'MyVpc', {
@@ -24,16 +25,7 @@ export  class CdkSelflearnStack extends cdk.Stack {
       vpc: vpc
     });
 
-    // Create an S3 bucket
-     const bucket = new s3.Bucket(this, 'MyBucket', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY // Remove this line if you want to keep the bucket when the stack is deleted
-    });
-
-    // Grant read/write access to ECS tasks
-    const bucketReadWritePolicy = new iam.PolicyStatement({
-      actions: ['s3:GetObject', 's3:PutObject'],
-      resources: [bucket.bucketArn + '/*']
-    });
+ 
 
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
@@ -68,10 +60,10 @@ export  class CdkSelflearnStack extends cdk.Stack {
       }),
       portMappings: [{ containerPort: 80 }],
       environment: {
-        BUCKET_NAME: bucket.bucketName
+        BUCKET_NAME: s3.bucket.bucketName
       }
     });
-    apiTaskDefinition.addToExecutionRolePolicy(bucketReadWritePolicy); 
+    apiTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy); 
     
     ApiContainer.addPortMappings({
       containerPort: 80,
@@ -90,10 +82,10 @@ export  class CdkSelflearnStack extends cdk.Stack {
       }),
       portMappings: [{ containerPort: 80 }],
       environment: {
-        BUCKET_NAME: bucket.bucketName
+        BUCKET_NAME: s3.bucket.bucketName
       }
     });
-    adminTaskDefinition.addToExecutionRolePolicy(bucketReadWritePolicy);
+    adminTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy);
     AdminContainer.addPortMappings({
       containerPort: 80,
       protocol: ecs.Protocol.TCP
@@ -111,10 +103,10 @@ export  class CdkSelflearnStack extends cdk.Stack {
       }),
       portMappings: [{ containerPort: 80 }],
       environment: {
-        BUCKET_NAME: bucket.bucketName
+        BUCKET_NAME: s3.bucket.bucketName
       }
     });
-    webTaskDefinition.addToExecutionRolePolicy(bucketReadWritePolicy);
+    webTaskDefinition.addToExecutionRolePolicy(s3.bucketPolicy);
     webContainer.addPortMappings({
       containerPort: 80,
       protocol: ecs.Protocol.TCP
