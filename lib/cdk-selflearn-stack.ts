@@ -6,6 +6,7 @@ import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import { ECSStack } from './cluster-stack';
 import { CloudfrontStack } from './cloudfront-stack';
+import { Route53ResolverDnsFirewallStack } from './Services/router53';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -18,6 +19,7 @@ export  class CdkSelflearnStack extends cdk.Stack {
     const ecs = new ECSStack(this, ec2, s3);
     const cloudfront = new CloudfrontStack(this, s3);
 
+    const route53 = new Route53ResolverDnsFirewallStack(this,ec2.vpc);
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
       vpc: ec2.vpc,
