@@ -7,7 +7,7 @@ import { EC2Stack } from './ec2-stack';
 import { ECSStack } from './cluster-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
-export  class CdkSelflearnStack extends cdk.Stack {
+export class CdkSelflearnStack extends cdk.Stack {
   public readonly cluster: ecs.Cluster;
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -19,13 +19,13 @@ export  class CdkSelflearnStack extends cdk.Stack {
     // Create an Application Load Balancer
     const loadBalancer = new elbv2.ApplicationLoadBalancer(this, 'ALB', {
       vpc: ec2.vpc,
-      internetFacing: true
+      internetFacing: true,
     });
 
     // Add a listener to the load balancer
     const listener = loadBalancer.addListener('Listener', {
       port: 80,
-    
+
       // 'open: true' is the default, you can leave it out if you want. Set it
       // to 'false' and use `listener.connections` if you want to be selective
       // about who can access the load balancer.
@@ -43,8 +43,8 @@ export  class CdkSelflearnStack extends cdk.Stack {
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
       healthCheck: {
-        path: '/api/health'
-      }
+        path: '/api/health',
+      },
     });
 
     const adminTargetGroup = new elbv2.ApplicationTargetGroup(this, 'AdminTargetGroup', {
@@ -53,8 +53,8 @@ export  class CdkSelflearnStack extends cdk.Stack {
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
       healthCheck: {
-        path: '/admin/health'
-      }
+        path: '/admin/health',
+      },
     });
 
     const webTargetGroup = new elbv2.ApplicationTargetGroup(this, 'WebTargetGroup', {
@@ -63,27 +63,27 @@ export  class CdkSelflearnStack extends cdk.Stack {
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [],
       healthCheck: {
-        path: '/'
-      }
+        path: '/',
+      },
     });
 
     // Add target groups to the listener with path-based routing
     listener.addTargetGroups('ApiTarget', {
       targetGroups: [apiTargetGroup],
       conditions: [elbv2.ListenerCondition.pathPatterns(['/api/*'])],
-      priority: 1
+      priority: 1,
     });
 
     listener.addTargetGroups('AdminTarget', {
       targetGroups: [adminTargetGroup],
       conditions: [elbv2.ListenerCondition.pathPatterns(['/admin/*'])],
-      priority: 2
+      priority: 2,
     });
 
     listener.addTargetGroups('WebTarget', {
       targetGroups: [webTargetGroup],
       conditions: [elbv2.ListenerCondition.pathPatterns(['/*'])],
-      priority: 3
+      priority: 3,
     });
   }
 }
@@ -99,7 +99,6 @@ export  class CdkSelflearnStack extends cdk.Stack {
 //   loadBalancer: splitAtListenerLBStack.loadBalancer,
 //   containerName: "web"
 // });
-
 
 // const splitAtTargetGroupLBStack = new SplitAtTargetGroup_LoadBalancerStack(app, 'SplitAtTargetGroup-LBStack', {
 //   vpc: infra.vpc,

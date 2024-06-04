@@ -6,6 +6,6 @@ export class EC2Stack {
   constructor(scope: Construct) {
     this.vpc = new ec2.Vpc(scope, 'cdk-vpc', {
       maxAzs: 2,
-    })
+    });
   }
 }
