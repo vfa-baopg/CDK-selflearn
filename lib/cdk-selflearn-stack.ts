@@ -6,7 +6,8 @@ import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import { ECSStack } from './cluster-stack';
 import { CloudfrontStack } from './cloudfront-stack';
-import { Route53ResolverDnsFirewallStack } from './Services/router53';
+import { AcmStack } from './acm-stack';
+import { Route53Stack } from './route53-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export  class CdkSelflearnStack extends cdk.Stack {
@@ -17,7 +18,12 @@ export  class CdkSelflearnStack extends cdk.Stack {
     const s3 = new S3Stack(this);
     const ec2 = new EC2Stack(this);
     const ecs = new ECSStack(this, ec2, s3);
-    const cloudfront = new CloudfrontStack(this, s3);
+    const route53 = new Route53Stack(this);
+    const acm = new AcmStack(this, route53);
+    const cloudfront = new CloudfrontStack(this, s3, acm);
+    const targetCloudfrontRecord = Route53Stack.createCloudfrontTargetRecord(cloudfront.distribution)
+    route53.addARecord(targetCloudfrontRecord)
+    route53.addAaaaRecord(targetCloudfrontRecord)
 
     const route53 = new Route53ResolverDnsFirewallStack(this,ec2.vpc);
     // Create an Application Load Balancer
@@ -91,26 +97,3 @@ export  class CdkSelflearnStack extends cdk.Stack {
     });
   }
 }
-// const app = new cdk.App();
-
-// const infra = new CdkSelflearnStack(app,'CDKInfra');
-// const splitAtListenerLBStack = new SplitAtListener_LoadBalancerStack(app, 'SplitAtListener-LBStack', {
-//   vpc: infra.vpc,
-// });
-// new SplitAtListener_ServiceStack(app, 'SplitAtListener-ServiceStack', {
-//   cluster: infra.cluster,
-//   vpc: infra.vpc,
-//   loadBalancer: splitAtListenerLBStack.loadBalancer,
-//   containerName: "web"
-// });
-
-
-// const splitAtTargetGroupLBStack = new SplitAtTargetGroup_LoadBalancerStack(app, 'SplitAtTargetGroup-LBStack', {
-//   vpc: infra.vpc,
-// });
-// new SplitAtTargetGroup_ServiceStack(app, 'SplitAtTargetGroup-ServiceStack', {
-//   cluster: infra.cluster,
-//   vpc: infra.vpc,
-//   targetGroup: splitAtTargetGroupLBStack.targetGroup
-// });
-// app.synth();
