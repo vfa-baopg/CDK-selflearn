@@ -4,6 +4,7 @@ import * as targets from 'aws-cdk-lib/aws-route53-targets'
 import * as logs from 'aws-cdk-lib/aws-logs';
 import getEnv from '../shared/getEnv';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import { ILoadBalancerV2 } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 export class Route53Stack {
   private readonly stackScope: Construct;
@@ -13,6 +14,7 @@ export class Route53Stack {
     this.stackScope = scope;
     const logGroup = new logs.LogGroup(scope, 'cdk-route53-log-group');
     const zoneName = getEnv('ROUTE53_ZONE_NAME');
+    console.log(zoneName);
     if (!zoneName) return;
     this.publicHostedZone = new route53.PublicHostedZone(scope, 'cdk-route53-public-hosted-zone', {
       zoneName,
@@ -42,4 +44,7 @@ export class Route53Stack {
     return new targets.CloudFrontTarget(distribution)
   }
 
+  public static createAlbTargetRecord(loadbalancer: ILoadBalancerV2) {
+    return new targets.LoadBalancerTarget(loadbalancer);
+  }
 }
