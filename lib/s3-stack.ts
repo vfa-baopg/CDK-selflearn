@@ -10,7 +10,7 @@ export class S3Stack {
   constructor(scope: Construct) {
     const s3BucketName = getEnv('S3_BUCKET_NAME')
     this.bucket = new s3.Bucket(scope, 'cdk-bucket', {
-      bucketName: s3BucketName,
+      bucketName: `my-unique-bucket-${s3BucketName}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
   }

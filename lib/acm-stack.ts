@@ -10,17 +10,20 @@ export class AcmStack {
   constructor(scope: Construct, route53: Route53Stack) {
     const domainNames = getEnv('DOMAIN_NAME_LIST')?.split(',');
 
-    if (!domainNames) return;
+    if (!domainNames) {
+      console.error('DOMAIN_NAME_LIST is not set or empty');
+      return;
+    }
     const dnsMultiZone: { [key in string]: route53.PublicHostedZone } = {};
     for (const domain of domainNames) {
       dnsMultiZone[domain] = route53.publicHostedZone;
     }
     this.certification = new acm.Certificate(scope, 'cdk-certification', {
       domainName: domainNames[0],
-      subjectAlternativeNames: [...domainNames.slice(1, domainNames.length)],
-      validation: acm.CertificateValidation.fromDnsMultiZone({
-        ...dnsMultiZone,
-      }),
+      subjectAlternativeNames: [...domainNames.slice(1)],
+      validation: acm.CertificateValidation.fromDnsMultiZone(dnsMultiZone),
     });
+
+    console.log(`ACM Certificate for domains ${domainNames.join(', ')} created and pending validation.`);
   }
 }
