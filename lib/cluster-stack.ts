@@ -20,7 +20,7 @@ export class ECSStack {
         id: 'cdk-api-task-definition',
         container: {
           id: 'cdk-api-container',
-          image: 'cdk-api-image',
+          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-api-image',
           port: 3000,
           protocol: ApplicationProtocol.HTTP,
           log: 'cdk-api-log-group',
@@ -41,7 +41,7 @@ export class ECSStack {
         id: 'cdk-admin-task-definition',
         container: {
           id: 'cdk-admin-container',
-          image: 'cdk-admin-image',
+          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-admin-image',
           port: 8081,
           protocol: ApplicationProtocol.HTTPS,
           log: 'cdk-admin-log-group',
@@ -62,7 +62,7 @@ export class ECSStack {
         id: 'cdk-web-task-definition',
         container: {
           id: 'cdk-web-container',
-          image: 'cdk-web-image',
+          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-web-image',
           port: 80,
           protocol: ApplicationProtocol.HTTPS,
           log: 'cdk-web-log-group',
