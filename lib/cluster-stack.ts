@@ -5,77 +5,13 @@ import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { AlbStack } from './alb-stack';
-import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as cdk from 'aws-cdk-lib';
+import { ECS_RESOURCE_NAME } from './env/config'
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 export class ECSStack {
   public readonly cluster: ecs.Cluster;
-
-  private readonly ECS_RESOURCE_NAME = {
-    api: {
-      service: {
-        id: 'cdk-api-service',
-      },
-      taskDefinition: {
-        id: 'cdk-api-task-definition',
-        container: {
-          id: 'cdk-api-container',
-          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-api-image',
-          port: 3000,
-          protocol: ApplicationProtocol.HTTP,
-          log: 'cdk-api-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-api-target-group',
-        healthcheckPath: '/api/health',
-        pathPatterns: '/api/*',
-        priority: 1,
-      },
-    },
-    admin: {
-      service: {
-        id: 'cdk-admin-service',
-      },
-      taskDefinition: {
-        id: 'cdk-admin-task-definition',
-        container: {
-          id: 'cdk-admin-container',
-          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-admin-image',
-          port: 8081,
-          protocol: ApplicationProtocol.HTTP,
-          log: 'cdk-admin-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-admin-target-group',
-        healthcheckPath: '/admin/health',
-        pathPatterns: '/admin/*',
-        priority: 2,
-      },
-    },
-    web: {
-      service: {
-        id: 'cdk-web-service',
-      },
-      taskDefinition: {
-        id: 'cdk-web-task-definition',
-        container: {
-          id: 'cdk-web-container',
-          image: 'public.ecr.aws/y6c5a0q4/amazon/amazon-ecs-sample:cdk-web-image',
-          port: 80,
-          protocol: ApplicationProtocol.HTTP,
-          log: 'cdk-web-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-web-target-group',
-        healthcheckPath: '/web/health',
-        pathPatterns: '/*',
-        priority: 3,
-      },
-    },
-  };
 
   private readonly apiService: ecs.FargateService;
   private readonly adminService: ecs.FargateService;
@@ -117,7 +53,7 @@ export class ECSStack {
     containerEnv?: Record<string, string>
   ) {
 
-    const resourceName = this.ECS_RESOURCE_NAME[resource];
+    const resourceName = ECS_RESOURCE_NAME[resource];
     // Define Fargate task definition
     const taskDefinition = new ecs.FargateTaskDefinition(
       scope,
@@ -126,6 +62,7 @@ export class ECSStack {
         memoryLimitMiB: 512,
         cpu: 256,
         executionRole: taskExecutionRole,
+        family: resourceName.taskDefinition.id
       },
     );
 
@@ -135,9 +72,14 @@ export class ECSStack {
       {
         image: ecs.ContainerImage.fromRegistry(resourceName.taskDefinition.container.image),
         logging: new ecs.AwsLogDriver({
-          streamPrefix: resourceName.taskDefinition.container.log,
+          logGroup: new logs.LogGroup(scope , resourceName.taskDefinition.container.log, {
+            logGroupName: resourceName.taskDefinition.container.log,
+            removalPolicy: cdk.RemovalPolicy.DESTROY // Optional: automatically delete log group on stack deletion
+          }),
+          streamPrefix: resourceName.taskDefinition.container.log
         }),
         environment: containerEnv,
+        containerName: resourceName.taskDefinition.container.id
       }
     );
 
@@ -156,13 +98,14 @@ export class ECSStack {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         onePerAz: true,
       }),
+      
     });
 
     // Create target group and listener condition
     const targetGroup = this.alb.createTargetGroup(
       resourceName.targetGroup.id,
       resourceName.taskDefinition.container.port,
-      resourceName.taskDefinition.container.protocol,
+      this.getProtocol(resourceName.taskDefinition.container.protocol),
       {
         path: resourceName.targetGroup.healthcheckPath,
       },
@@ -182,5 +125,16 @@ export class ECSStack {
     );
 
     return fargateService;
+  }
+
+  private getProtocol(protocol: string): elbv2.ApplicationProtocol {
+    switch (protocol) {
+      case 'HTTP':
+        return elbv2.ApplicationProtocol.HTTP;
+      case 'HTTPS':
+        return elbv2.ApplicationProtocol.HTTPS;
+      default:
+        return elbv2.ApplicationProtocol.HTTP;
+    }
   }
 }
