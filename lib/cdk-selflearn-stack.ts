@@ -9,6 +9,7 @@ import { CloudfrontStack } from './cloudfront-stack';
 import { AcmStack } from './acm-stack';
 import { Route53Stack } from './route53-stack';
 import { AlbStack } from './alb-stack';
+import { CodePipelineCodeCommitStack } from './codepipeline/codepipelineCodeCommit';
 
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
@@ -29,11 +30,30 @@ export class CdkSelflearnStack extends cdk.Stack {
     route53.addARecord(targetCloudfrontRecord,'CloudfrontARecord');
     route53.addAaaaRecord(targetCloudfrontRecord,'CloudfrontAAAARecord');
     const alb = new AlbStack(this, ec2);
+
     const ecs = new ECSStack(this, ec2, s3, alb);
     const targetAlbRecord = Route53Stack.createAlbTargetRecord(
       alb.alb
     );
     route53.addARecord(targetAlbRecord,'AlbARecord');
     route53.addAaaaRecord(targetAlbRecord,'AlbAAAARecord');
+
+
+
+    //Prepare for HTTPS listener
+    // const healthCheck: elbv2.HealthCheck = {
+    //   protocol: elbv2.Protocol.HTTPS,
+    //   port: '443',
+    //   path: '/health',
+    //   interval: cdk.Duration.seconds(30),
+    //   timeout: cdk.Duration.seconds(5),
+    //   healthyThresholdCount: 2,
+    //   unhealthyThresholdCount: 2,
+    // };
+    
+    // const targetGroup = alb.createTargetGroup('MyTargetGroup', 443, elbv2.ApplicationProtocol.HTTPS, healthCheck, [yourTargets]);
+    
+    // alb.addTargetGroup('MyTargetGroupRule', targetGroup, 1, alb.createListenerConditionPathPatterns(['/your-path']));
+   
   }
 }

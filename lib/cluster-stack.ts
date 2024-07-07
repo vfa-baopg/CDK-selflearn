@@ -13,9 +13,9 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 export class ECSStack {
   public readonly cluster: ecs.Cluster;
 
-  private readonly apiService: ecs.FargateService;
-  private readonly adminService: ecs.FargateService;
-  private readonly webService: ecs.FargateService;
+  public readonly apiService: ecs.FargateService;
+  public readonly adminService: ecs.FargateService;
+  public readonly webService: ecs.FargateService;
   private readonly ec2: EC2Stack;
   private readonly alb: AlbStack;
 

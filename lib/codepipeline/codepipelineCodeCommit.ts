@@ -13,51 +13,35 @@ import { StackProps } from 'aws-cdk-lib';
 import { S3Stack } from '../s3-stack';
 import { ECSStack } from '../cluster-stack';
 import { EC2Stack } from '../ec2-stack';
+import { AlbStack } from '../alb-stack';
 
 export interface CodepipelineStackProps extends StackProps {
-  s3Stack?: S3Stack;
-  ec2?: EC2Stack;
-  ecrRepo?: ecr.Repository;
-  service?: ECSStack;
-  resource?: ('api' | 'web' | 'admin');
+  s3: S3Stack;
+  ec2: EC2Stack;
+  ecrRepo: ecr.Repository;
+  service: ECSStack;
+  alb: AlbStack;
 }
 
 
-export class CodePipelineCodeCommitStack extends cdk.Stack {
+export class CodePipelineCodeCommitStack {
+  public readonly apiCodePipeLine: cdk.aws_codepipeline.Pipeline;
+  public readonly webCodePipeLine:  cdk.aws_codepipeline.Pipeline;
+  public readonly adminCodePipeLine:  cdk.aws_codepipeline.Pipeline;
   constructor(scope: Construct, id: string, props: CodepipelineStackProps) {
-    super(scope, id, props);
+    this.apiCodePipeLine = this.initCodePipeLine(scope,props,'api');
+    this.webCodePipeLine = this.initCodePipeLine(scope,props,'web');
+    this.adminCodePipeLine = this.initCodePipeLine(scope,props,'admin');
+  }
 
-    // Ensure props.resource is defined and not empty
-    const resource = props.resource ?? 'web';
-
-    // Create S3 bucket if not provided
-    if (props.s3Stack == undefined) {
-      props.s3Stack = new S3Stack(this);
-    }
-
-    // Create an ECR repository if not provided
-    if (props.ecrRepo == undefined) {
-      props.ecrRepo = new ecr.Repository(this, 'EcrRepository');
-    }
-    
-    // Create EC2 stack if not provided
-    if (props.ec2 == undefined) {
-      props.ec2 = new EC2Stack(this);
-    }
-    
-    // Create ECS service if not provided
-    if (props.service == undefined) {
-      props.service = new ECSStack(this, props.ec2, props.s3Stack);
-    }
-
-
+  private initCodePipeLine(scope: Construct, props: CodepipelineStackProps,resource: String) {
     // Create CodeCommit repository
-    const codeRepo =  new codecommit.Repository(this, `${resource}-CodeRepo`, {
+    const codeRepo =  new codecommit.Repository(scope, `${resource}-CodeRepo`, {
       repositoryName: `${resource}-Repo`,
     });
       
     // Create CodeBuild project to push code to S3
-    const pushToS3Project = new codebuild.PipelineProject(this, `${resource}-PushToS3Project`, {
+    const pushToS3Project = new codebuild.PipelineProject(scope, `${resource}-PushToS3Project`, {
       buildSpec: codebuild.BuildSpec.fromObject({
         version: '0.2',
         phases: {
@@ -79,25 +63,25 @@ export class CodePipelineCodeCommitStack extends cdk.Stack {
       }),
       environmentVariables: {
         'S3_BUCKET': {
-          value: props.s3Stack.bucket.bucketName,
+          value: props.s3.bucket.bucketName,
         },
       },
     });
 
     // Grant necessary permissions to CodeBuild project
-    props.s3Stack.bucket.grantReadWrite(pushToS3Project);
+    props.s3.bucket.grantReadWrite(pushToS3Project);
     codeRepo.grantRead(pushToS3Project);
 
     // Create CodePipeline
-    const pipeline = new codepipeline.Pipeline(this, '${resource}-Pipeline', {
-      pipelineName: '${resource}dev',
+    const pipeline = new codepipeline.Pipeline(scope, '${resource}-Pipeline', {
+      pipelineName: '${resource}-dev',
     });
 
     // Add source action (S3 event)
     const sourceOutput = new codepipeline.Artifact();
     const sourceAction = new codepipelineActions.S3SourceAction({
       actionName: 'Source',
-      bucket: props.s3Stack.bucket,
+      bucket: props.s3.bucket,
       bucketKey: '${resource}/src.zip',
       output: sourceOutput,
       trigger: codepipelineActions.S3Trigger.EVENTS,
@@ -120,7 +104,7 @@ export class CodePipelineCodeCommitStack extends cdk.Stack {
     });
 
       // Define build project
-      const buildProject = new codebuild.PipelineProject(this, `${resource}BuildProject`, {
+      const buildProject = new codebuild.PipelineProject(scope, `${resource}-BuildProject`, {
         environment: {
           buildImage: codebuild.LinuxBuildImage.STANDARD_5_0,
           privileged: true,
@@ -199,7 +183,7 @@ export class CodePipelineCodeCommitStack extends cdk.Stack {
       // Define deploy action (example deployment to ECS)
       const deployAction = new codepipelineActions.EcsDeployAction({
         actionName: `${resource}DeployAction`,
-        service: service.service, // ECS service name determined dynamically
+        service: service, // ECS service name determined dynamically
         input: buildOutput, // Assuming buildOutput is your pipeline's build output artifact
       });
 
@@ -223,11 +207,12 @@ export class CodePipelineCodeCommitStack extends cdk.Stack {
       }));
 
       // Grant pipeline role necessary permissions
-      props.s3Stack?.bucket.grantReadWrite(pipeline.role);
+      props.s3?.bucket.grantReadWrite(pipeline.role);
       props.ecrRepo.grantPullPush(buildProject.role!);
       buildProject.addToRolePolicy(new iam.PolicyStatement({
         actions: ['ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage', 'ecr:CompleteLayerUpload', 'ecr:UploadLayerPart', 'ecr:InitiateLayerUpload'],
         resources: [`${props.ecrRepo.repositoryArn}`],
       }));
+      return pipeline;
   }
 }
