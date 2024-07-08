@@ -11,10 +11,38 @@ export class Route53Stack {
   public readonly publicHostedZone: route53.PublicHostedZone;
 
   constructor(scope: Construct) {
-    this.stackScope = scope;
     const logGroup = new logs.LogGroup(scope, 'cdk-route53-log-group');
+    const logGroupPolicy = new logs.CfnResourcePolicy(scope, 'LogGroupResourcePolicy', {
+      policyName: 'Route53QueryLoggingPolicy',
+      policyDocument: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: {
+              Service: 'route53.amazonaws.com',
+            },
+            Action:  [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+              "logs:PutLogEventsBatch",
+            ],
+            Resource: logGroup.logGroupArn,
+          },
+          {
+            Effect: 'Allow',
+            Principal: {
+              Service: 'route53.amazonaws.com',
+            },
+            Action: 'logs:CreateLogStream',
+            Resource: `${logGroup.logGroupArn}:log-stream:*`,
+          },
+        ],
+      }),
+    });
+    logGroupPolicy.node.addDependency(logGroup);
+    this.stackScope = scope;
     const zoneName = getEnv('ROUTE53_ZONE_NAME');
-    console.log(zoneName);
     if (!zoneName) return;
     this.publicHostedZone = new route53.PublicHostedZone(scope, 'cdk-route53-public-hosted-zone', {
       zoneName,
@@ -26,10 +54,11 @@ export class Route53Stack {
    * Add A record target to route 53
    * @param target Record target
    */
-  public addARecord(target: route53.IAliasRecordTarget) {
-    new route53.ARecord(this.stackScope, 'cdk-alias-a-record-cloudfront', {
+  public addARecord(recordName: string, id: string, target: route53.IAliasRecordTarget) {
+    new route53.ARecord(this.stackScope, id, {
       zone: this.publicHostedZone,
-      target: route53.RecordTarget.fromAlias(target)
+      target: route53.RecordTarget.fromAlias(target),
+      recordName,
     })
   }
 

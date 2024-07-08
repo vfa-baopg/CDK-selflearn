@@ -9,6 +9,7 @@ import { CloudfrontStack } from './cloudfront-stack';
 import { AcmStack } from './acm-stack';
 import { Route53Stack } from './route53-stack';
 import { AlbStack } from './alb-stack';
+import { EcrStack } from './ecr-stack';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export class CdkSelflearnStack extends cdk.Stack {
@@ -24,14 +25,17 @@ export class CdkSelflearnStack extends cdk.Stack {
     const targetCloudfrontRecord = Route53Stack.createCloudfrontTargetRecord(
       cloudfront.distribution
     );
-    route53.addARecord(targetCloudfrontRecord);
-    route53.addAaaaRecord(targetCloudfrontRecord);
-    const alb = new AlbStack(this, ec2);
-    const ecs = new ECSStack(this, ec2, s3, alb);
-    const targetAlbRecord = Route53Stack.createAlbTargetRecord(
-      alb.alb
+    route53.addARecord(
+      'cloudhosting.click',
+      'cdk-alias-a-record-cloudfront',
+      targetCloudfrontRecord
     );
-    route53.addARecord(targetAlbRecord);
-    route53.addAaaaRecord(targetAlbRecord);
+    const ecrApi = new EcrStack(this, 'cdk-repository-api');
+    const ecrFe = new EcrStack(this, 'cdk-repository-fe');
+    const ecrAdmin = new EcrStack(this, 'cdk-repository-admin');
+    const alb = new AlbStack(this, ec2);
+    const ecs = new ECSStack(this, ec2, alb, ecrApi, ecrAdmin, ecrFe, s3);
+    const targetAlbRecord = Route53Stack.createAlbTargetRecord(alb.alb);
+    route53.addARecord('api.cloudhosting.click', 'alias-a-record-alb', targetAlbRecord);
   }
 }

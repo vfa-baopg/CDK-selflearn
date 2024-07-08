@@ -8,7 +8,6 @@ type S3OriginWithOACPatchProps = S3OriginProps & {
     oacId: Reference;
 };
 
-
 export class S3OriginWithOACPatch extends S3Origin {
     private readonly oacId: Reference;
 
