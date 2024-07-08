@@ -20,10 +20,10 @@ export class AcmStack {
     }
     this.certification = new acm.Certificate(scope, 'cdk-certification', {
       domainName: domainNames[0],
-      subjectAlternativeNames: [...domainNames.slice(1)],
-      validation: acm.CertificateValidation.fromDnsMultiZone(dnsMultiZone),
+      subjectAlternativeNames: [...domainNames.slice(1, domainNames.length)],
+      validation: acm.CertificateValidation.fromDnsMultiZone({
+        ...dnsMultiZone,
+      }),
     });
-
-    console.log(`ACM Certificate for domains ${domainNames.join(', ')} created and pending validation.`);
   }
 }

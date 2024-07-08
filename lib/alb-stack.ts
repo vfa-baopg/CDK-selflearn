@@ -2,6 +2,7 @@ import { Construct } from 'constructs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { EC2Stack } from './ec2-stack';
 import { SubnetType } from 'aws-cdk-lib/aws-ec2';
+import getEnv from '../shared/getEnv';
 
 export class AlbStack {
   private readonly scope: Construct;
@@ -10,7 +11,7 @@ export class AlbStack {
   private readonly listener: elbv2.ApplicationListener;
 
   constructor(scope: Construct, ec2: EC2Stack) {
-    const albName = process.env.ALB_NAME;
+    const albName = getEnv('ALB_NAME');
     this.scope = scope;
     this.ec2 = ec2;
     this.alb = new elbv2.ApplicationLoadBalancer(scope, 'cdk-alb', {

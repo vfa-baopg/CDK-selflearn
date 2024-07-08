@@ -1,5 +1,6 @@
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
+import getEnv from '../shared/getEnv';
 
 export class EC2Stack {
   public readonly vpc: ec2.Vpc;

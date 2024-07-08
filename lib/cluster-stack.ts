@@ -5,6 +5,9 @@ import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { AlbStack } from './alb-stack';
+import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { EcrStack } from './ecr-stack';
+import { Repository } from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cdk from 'aws-cdk-lib';
@@ -13,20 +16,35 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 export class ECSStack {
   public readonly cluster: ecs.Cluster;
 
-  public readonly apiService: ecs.FargateService;
-  public readonly adminService: ecs.FargateService;
-  public readonly webService: ecs.FargateService;
+  // Ecs service
+  protected readonly apiService: ecs.FargateService;
+  protected readonly adminService: ecs.FargateService;
+  protected readonly webService: ecs.FargateService;
   private readonly ec2: EC2Stack;
   private readonly alb: AlbStack;
+  private readonly ecrApi: EcrStack;
+  private readonly ecrAdmin: EcrStack;
+  private readonly ecrWeb: EcrStack;
 
-  constructor(scope: Construct, ec2: EC2Stack, s3: S3Stack, alb: AlbStack) {
+  constructor(
+    scope: Construct,
+    ec2: EC2Stack,
+    alb: AlbStack,
+    ecrApi: EcrStack,
+    ecrAdmin: EcrStack,
+    ecrWeb: EcrStack,
+    s3: S3Stack
+  ) {
+    // Create an ECS cluster
     this.ec2 = ec2;
     this.alb = alb;
-
-    // Create an ECS cluster
+    this.ecrApi = ecrApi;
+    this.ecrAdmin = ecrAdmin;
+    this.ecrWeb = ecrWeb;
     this.cluster = new ecs.Cluster(scope, 'cdk-cluster', {
       vpc: this.ec2.vpc,
     });
+
     const taskExecutionRole = new iam.Role(scope, 'TaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       managedPolicies: [
@@ -34,10 +52,15 @@ export class ECSStack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess'),
       ],
     });
-    // Initialize ECS services
-    this.apiService = this.initEcsService(scope,taskExecutionRole, 'api', { BUCKET_NAME: s3.bucket.bucketName });
-    this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin', { BUCKET_NAME: s3.bucket.bucketName });
-    this.webService = this.initEcsService(scope,taskExecutionRole, 'web', { BUCKET_NAME: s3.bucket.bucketName });
+    this.apiService = this.initEcsService(scope,taskExecutionRole, 'api', {
+      BUCKET_NAME: s3.bucket.bucketName,
+    });
+    this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin', {
+      BUCKET_NAME: s3.bucket.bucketName,
+    });
+    this.apiService = this.initEcsService(scope,taskExecutionRole, 'web',  {
+      BUCKET_NAME: s3.bucket.bucketName,
+    });
   }
 
   /**
