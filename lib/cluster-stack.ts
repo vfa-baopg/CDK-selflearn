@@ -22,25 +22,16 @@ export class ECSStack {
   protected readonly webService: ecs.FargateService;
   private readonly ec2: EC2Stack;
   private readonly alb: AlbStack;
-  private readonly ecrApi: EcrStack;
-  private readonly ecrAdmin: EcrStack;
-  private readonly ecrWeb: EcrStack;
 
   constructor(
     scope: Construct,
     ec2: EC2Stack,
     alb: AlbStack,
-    ecrApi: EcrStack,
-    ecrAdmin: EcrStack,
-    ecrWeb: EcrStack,
     s3: S3Stack
   ) {
     // Create an ECS cluster
     this.ec2 = ec2;
     this.alb = alb;
-    this.ecrApi = ecrApi;
-    this.ecrAdmin = ecrAdmin;
-    this.ecrWeb = ecrWeb;
     this.cluster = new ecs.Cluster(scope, 'cdk-cluster', {
       vpc: this.ec2.vpc,
     });
