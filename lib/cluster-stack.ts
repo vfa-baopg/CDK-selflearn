@@ -4,7 +4,8 @@ import { Construct } from 'constructs';
 import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 
-export class ECSStack {
+
+export class ECSStack{
   public readonly cluster: ecs.Cluster;
 
   private readonly ECS_RESOURCE_NAME = {
@@ -32,11 +33,11 @@ export class ECSStack {
   }
 
   // Ecs service
-  private readonly apiService: ecs_patterns.ApplicationLoadBalancedFargateService;
-  private readonly adminService: ecs_patterns.ApplicationLoadBalancedFargateService;
-  private readonly webService: ecs_patterns.ApplicationLoadBalancedFargateService;
+  public readonly apiService: ecs_patterns.ApplicationLoadBalancedFargateService;
+  public readonly adminService: ecs_patterns.ApplicationLoadBalancedFargateService;
+  public readonly webService: ecs_patterns.ApplicationLoadBalancedFargateService;
 
-  constructor(scope: Construct, ec2: EC2Stack, s3: S3Stack) {
+  constructor(scope: Construct , ec2: EC2Stack, s3: S3Stack) {
     // Create an ECS cluster
     this.cluster = new ecs.Cluster(scope, 'cdk-cluster', {
       vpc: ec2.vpc
