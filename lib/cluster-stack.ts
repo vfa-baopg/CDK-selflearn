@@ -10,6 +10,7 @@ import * as cdk from 'aws-cdk-lib';
 import { ECS_RESOURCE_NAME } from './env/config'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { StackProps } from 'aws-cdk-lib';
+import { EcrStack } from './ecr-stack';
 
 export interface ClusterProps extends StackProps{
   ec2: EC2Stack,
@@ -42,6 +43,9 @@ export class ECSStack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess'),
       ],
     });
+
+
+
     this.apiService = this.initEcsService(scope,taskExecutionRole, 'api', {
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
@@ -78,6 +82,10 @@ export class ECSStack {
         family: resourceName.taskDefinition.id
       },
     );
+
+    // Init Image
+    const ecr = this.initImage(scope,resource, taskExecutionRole);
+
 
     // Add container to task definition
     const container = taskDefinition.addContainer(
@@ -139,6 +147,10 @@ export class ECSStack {
 
     return fargateService;
   }
+  private initImage(scope: Construct, resource: string, taskExecutionRole: iam.Role) {
+    return new EcrStack(scope,resource,taskExecutionRole);
+  }
+
 
   private getProtocol(protocol: string): elbv2.ApplicationProtocol {
     switch (protocol) {
