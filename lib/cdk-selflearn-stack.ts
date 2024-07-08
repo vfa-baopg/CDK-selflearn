@@ -29,7 +29,7 @@ export class CdkSelflearnStack extends cdk.Stack {
     route53.addARecord(targetCloudfrontRecord,'CloudfrontARecord');
     route53.addAaaaRecord(targetCloudfrontRecord,'CloudfrontAAAARecord');
     const alb = new AlbStack(this, ec2);
-    const ecs = new ECSStack(this, ec2, s3, alb);
+    const ecs = new ECSStack(this, ec2, alb,s3);
     const targetAlbRecord = Route53Stack.createAlbTargetRecord(
       alb.alb
     );
