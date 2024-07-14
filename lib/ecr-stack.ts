@@ -6,7 +6,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as codepipeline from 'aws-cdk-lib/aws-codepipeline';
 import * as codepipeline_actions from 'aws-cdk-lib/aws-codepipeline-actions';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
-import { SecretValue } from 'aws-cdk-lib';
+import * as cdk from 'aws-cdk-lib'
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as codepipelineActions from 'aws-cdk-lib/aws-codepipeline-actions';
 
@@ -18,6 +18,8 @@ export class EcrStack extends Construct {
 
     this.repository = new ecr.Repository(this, `${id}-repo`, {
       repositoryName: `${id}-repo`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteImages: true
     });
 
     const dockerImage = new ecr_assets.DockerImageAsset(this, `CodeRepo-${id}`, {
@@ -32,6 +34,8 @@ export class EcrStack extends Construct {
     const sourceBucket = new s3.Bucket(this, `${id}-bucket`, {
       bucketName: `${id}-bucket`,
       versioned: true,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true
     });
     const pipeline = new codepipeline.Pipeline(this, `${id}-Pipeline`, {
       pipelineName: `${id}-Pipeline`,
