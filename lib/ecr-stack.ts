@@ -9,11 +9,13 @@ import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as cdk from 'aws-cdk-lib'
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as codepipelineActions from 'aws-cdk-lib/aws-codepipeline-actions';
+import { S3Stack } from './s3-stack';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
 
 export class EcrStack extends Construct {
   public readonly repository: ecr.Repository;
 
-  constructor(scope: Construct, id: string, taskExecutionRole: iam.Role) {
+  constructor(scope: Construct, id: string, taskExecutionRole: iam.Role, sourceBucket: S3Stack, service: ecs.FargateService) {
     super(scope, id);
 
     this.repository = new ecr.Repository(this, `${id}-repo`, {
@@ -29,26 +31,24 @@ export class EcrStack extends Construct {
     this.repository.grantPullPush(taskExecutionRole);
 
     // Create CodePipeline
-    const sourceOutput = new codepipeline.Artifact();
-    const buildOutput = new codepipeline.Artifact();
-    const sourceBucket = new s3.Bucket(this, `${id}-bucket`, {
-      bucketName: `${id}-bucket`,
-      versioned: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true
-    });
+    const sourceOutput = new codepipeline.Artifact(`${id}-Source-Artifact`);
+
+
+    const buildOutput = new codepipeline.Artifact(`${id}-Source-Build-Artifact`);
+
     const pipeline = new codepipeline.Pipeline(this, `${id}-Pipeline`, {
       pipelineName: `${id}-Pipeline`,
+      artifactBucket: sourceBucket.bucket,
       stages: [
         {
           stageName: 'Source',
           actions: [
             new codepipeline_actions.S3SourceAction({
               actionName: 'Source',
-              bucket: sourceBucket,
+              bucket: sourceBucket.bucket,
               bucketKey: `${id}.zip`,
               output: sourceOutput,
-              trigger: codepipelineActions.S3Trigger.EVENTS,
+              trigger: codepipelineActions.S3Trigger.POLL,
             }),
           ],
         },
@@ -74,20 +74,33 @@ export class EcrStack extends Construct {
                     REGION: { value: process.env?.CDK_DEFAULT_REGION || "" },
                     IMAGE_TAG: { value: "latest" },
                     IMAGE_REPO_NAME: { value: dockerImage.repository.repositoryName },
-                    // REPOSITORY_URI: { value: imageRepo.repositoryUri },
-                    // TASK_DEFINITION_ARN: { value: fargateTaskDef.taskDefinitionArn },
-                    // TASK_ROLE_ARN: { value: fargateTaskDef.taskRole.roleArn },
-                    // EXECUTION_ROLE_ARN: { value: fargateTaskDef.executionRole?.roleArn },
+                    REPOSITORY_URI: { value: dockerImage.imageUri },
+                    TASK_DEFINITION_ARN: { value: service.taskDefinition.taskDefinitionArn },
+                    TASK_ROLE_ARN: { value: service.taskDefinition.taskRole.roleArn },
+                    EXECUTION_ROLE_ARN: { value: service.taskDefinition.executionRole?.roleArn },
                   },
                 },
-                buildSpec: codebuild.BuildSpec.fromSourceFilename(`../container/${id}/buildspec.yml`),
+                buildSpec: codebuild.BuildSpec.fromSourceFilename(`/app/buildspec.yaml`),
               }),
               input: sourceOutput,
               outputs: [buildOutput],
             }),
           ],
         },
+        {
+          stageName: "Deploy",
+          actions: [
+            new codepipelineActions.EcsDeployAction({
+              actionName: `${id}-deployAction`,
+              service: service, // ECS service name determined dynamically
+              input: buildOutput, // Assuming buildOutput is your pipeline's build output artifact
+            }),
+          ],
+        }
       ],
     });
+
+
+
   }
 }

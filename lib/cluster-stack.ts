@@ -11,6 +11,7 @@ import { ECS_RESOURCE_NAME } from './env/config'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { StackProps } from 'aws-cdk-lib';
 import { EcrStack } from './ecr-stack';
+import { S3 } from 'aws-cdk-lib/aws-ses-actions';
 
 export interface ClusterProps extends StackProps{
   ec2: EC2Stack,
@@ -46,13 +47,13 @@ export class ECSStack {
 
 
 
-    this.apiService = this.initEcsService(scope,taskExecutionRole, 'api', {
+    this.apiService = this.initEcsService(scope,taskExecutionRole, 'api',   props.s3, {
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
-    this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin', {
+    this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin',   props.s3, {
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
-    this.apiService = this.initEcsService(scope,taskExecutionRole, 'web',  {
+    this.apiService = this.initEcsService(scope,taskExecutionRole, 'web',   props.s3 ,{
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
   }
@@ -67,6 +68,7 @@ export class ECSStack {
     scope: Construct,
     taskExecutionRole: iam.Role,
     resource: 'api' | 'web' | 'admin',
+    s3: S3Stack,
     containerEnv?: Record<string, string>
   ) {
 
@@ -82,11 +84,6 @@ export class ECSStack {
         family: resourceName.taskDefinition.id
       },
     );
-
-    // Init Image
-    const ecr = this.initImage(scope,resource, taskExecutionRole);
-
-
     // Add container to task definition
     const container = taskDefinition.addContainer(
       resourceName.taskDefinition.container.id,
@@ -145,10 +142,12 @@ export class ECSStack {
       listenerCondition
     );
 
+    // Init Image
+    const ecr = this.initImage(scope,resource, taskExecutionRole,s3, fargateService);
     return fargateService;
   }
-  private initImage(scope: Construct, resource: string, taskExecutionRole: iam.Role) {
-    return new EcrStack(scope,resource,taskExecutionRole);
+  private initImage(scope: Construct, resource: string, taskExecutionRole: iam.Role, s3: S3Stack, fargateService: ecs.FargateService) {
+    return new EcrStack(scope,resource,taskExecutionRole,s3,fargateService);
   }
 
 

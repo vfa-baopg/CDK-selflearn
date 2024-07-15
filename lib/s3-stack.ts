@@ -12,6 +12,8 @@ export class S3Stack {
     this.bucket = new s3.Bucket(scope, 'cdk-bucket', {
       bucketName: `my-unique-bucket-${s3BucketName}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      versioned: true
     })
   }
 
