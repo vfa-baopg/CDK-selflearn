@@ -18,23 +18,60 @@ export class EcrStack extends Construct {
   constructor(scope: Construct, id: string, taskExecutionRole: iam.Role, sourceBucket: S3Stack, service: ecs.FargateService) {
     super(scope, id);
 
-    this.repository = new ecr.Repository(this, `${id}-repo`, {
-      repositoryName: `${id}-repo`,
+    this.repository = new ecr.Repository(this, `${id}`, {
+      repositoryName: `${id}`,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteImages: true
     });
 
-    const dockerImage = new ecr_assets.DockerImageAsset(this, `CodeRepo-${id}`, {
-      directory: path.join(__dirname, `../container/${id}/`)
-    });
+    // const dockerImage = new ecr_assets.DockerImageAsset(this, `CodeRepo-${id}`, {
+    //   directory: path.join(__dirname, `../container/${id}/`)
+    // });
 
     this.repository.grantPullPush(taskExecutionRole);
 
     // Create CodePipeline
     const sourceOutput = new codepipeline.Artifact(`${id}-Source-Artifact`);
-
-
     const buildOutput = new codepipeline.Artifact(`${id}-Source-Build-Artifact`);
+
+
+    const buildProject = new codebuild.PipelineProject(this, `${id}-BuildProject`, {
+      environment: {
+        buildImage: codebuild.LinuxBuildImage.STANDARD_5_0,
+        privileged: true, // Ensure privileged mode is enabled
+        environmentVariables: {
+          AWS_ACCOUNT_ID: { value: process.env?.CDK_DEFAULT_ACCOUNT || "" },
+          REGION: { value: process.env?.CDK_DEFAULT_REGION || "" },
+          IMAGE_TAG: { value: "latest" },
+          RESOURCE_NAME: { value: this.repository},
+          IMAGE_REPO_NAME: { value: this.repository.repositoryName },
+          REPOSITORY_URI: { value: this.repository.repositoryUri },
+          TASK_DEFINITION_ARN: { value: service.taskDefinition.taskDefinitionArn },
+          TASK_ROLE_ARN: { value: service.taskDefinition.taskRole.roleArn },
+          EXECUTION_ROLE_ARN: { value: service.taskDefinition.executionRole?.roleArn },
+        },
+      },
+      buildSpec: codebuild.BuildSpec.fromSourceFilename(`${id}/buildspec.yaml`),
+    });
+    buildProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'ecr:GetAuthorizationToken',
+        'ecr:BatchCheckLayerAvailability',
+        'ecr:GetDownloadUrlForLayer',
+        'ecr:BatchGetImage',
+        'ecr:InitiateLayerUpload', // Add the required action
+        'ecr:UploadLayerPart',
+        'ecr:CompleteLayerUpload',
+        'ecr:PutImage'
+      ],
+      resources: ['*'],
+    }));
+    const buildStage = new codepipeline_actions.CodeBuildAction({
+      actionName: 'Build',
+      project: buildProject,
+      input: sourceOutput,
+      outputs: [buildOutput],
+    });
 
     const pipeline = new codepipeline.Pipeline(this, `${id}-Pipeline`, {
       pipelineName: `${id}-Pipeline`,
@@ -63,28 +100,7 @@ export class EcrStack extends Construct {
         {
           stageName: 'Build',
           actions: [
-            new codepipeline_actions.CodeBuildAction({
-              actionName: 'Build',
-              project: new codebuild.PipelineProject(this, `${id}-BuildProject`, {
-                environment: {
-                  buildImage: codebuild.LinuxBuildImage.STANDARD_5_0,
-                  privileged: true, // Ensure privileged mode is enabled
-                  environmentVariables: {
-                    AWS_ACCOUNT_ID: { value: process.env?.CDK_DEFAULT_ACCOUNT || "" },
-                    REGION: { value: process.env?.CDK_DEFAULT_REGION || "" },
-                    IMAGE_TAG: { value: "latest" },
-                    IMAGE_REPO_NAME: { value: dockerImage.repository.repositoryName },
-                    REPOSITORY_URI: { value: dockerImage.imageUri },
-                    TASK_DEFINITION_ARN: { value: service.taskDefinition.taskDefinitionArn },
-                    TASK_ROLE_ARN: { value: service.taskDefinition.taskRole.roleArn },
-                    EXECUTION_ROLE_ARN: { value: service.taskDefinition.executionRole?.roleArn },
-                  },
-                },
-                buildSpec: codebuild.BuildSpec.fromSourceFilename(`/app/buildspec.yaml`),
-              }),
-              input: sourceOutput,
-              outputs: [buildOutput],
-            }),
+            buildStage
           ],
         },
         {
@@ -100,7 +116,9 @@ export class EcrStack extends Construct {
       ],
     });
 
-
+    // Add permissions to the pipeline role
+    const pipelineRole = pipeline.role;
+    pipelineRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2ContainerRegistryPowerUser'));
 
   }
 }
