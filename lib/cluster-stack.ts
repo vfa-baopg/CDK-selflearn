@@ -9,7 +9,8 @@ import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { EcrStack } from './ecr-stack';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 
-export class ECSStack {
+
+export class ECSStack{
   public readonly cluster: ecs.Cluster;
 
   private readonly ECS_RESOURCE_NAME = {
