@@ -34,6 +34,7 @@ export class ECSStack {
     this.ec2 = props.ec2;
     this.alb = props.alb;
     this.cluster = new ecs.Cluster(scope, 'cdk-cluster', {
+      clusterName: `Custom-Cluster`,
       vpc: this.ec2.vpc,
     });
 
@@ -53,7 +54,7 @@ export class ECSStack {
     this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin',   props.s3, {
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
-    this.apiService = this.initEcsService(scope,taskExecutionRole, 'web',   props.s3 ,{
+    this.webService = this.initEcsService(scope,taskExecutionRole, 'web',   props.s3 ,{
       BUCKET_NAME: props.s3.bucket.bucketName,
     });
   }
@@ -108,19 +109,20 @@ export class ECSStack {
     });
 
     // Create Fargate service and attach to the target group
-    const fargateService = new ecs.FargateService(scope, resourceName.service.id, {
-      cluster: this.cluster,
-      taskDefinition: taskDefinition,
-      desiredCount: 2,
-      vpcSubnets: this.ec2.vpc.selectSubnets({
-        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-        onePerAz: true,
-      }),
-      
-    });
+    const fargateService = this.createFargate(scope, resourceName, taskDefinition);
 
     // Create target group and listener condition
-    const targetGroup = this.alb.createTargetGroup(
+    this.createTargetGroup(resourceName, fargateService);
+
+    // Init Image
+    this.initImage(scope,resource, taskExecutionRole,s3, fargateService);
+    return fargateService;
+  }
+
+
+  private createTargetGroup(resourceName: { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; }, fargateService: ecs.FargateService) {
+    
+    var targetGroup = this.alb.createTargetGroup(
       resourceName.targetGroup.id,
       resourceName.taskDefinition.container.port,
       this.getProtocol(resourceName.taskDefinition.container.protocol),
@@ -142,10 +144,21 @@ export class ECSStack {
       listenerCondition
     );
 
-    // Init Image
-    const ecr = this.initImage(scope,resource, taskExecutionRole,s3, fargateService);
-    return fargateService;
   }
+
+  private createFargate(scope: Construct, resourceName: { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; }, taskDefinition: ecs.FargateTaskDefinition) {
+    return new ecs.FargateService(scope, resourceName.service.id, {
+      serviceName: `${resourceName.service.id}`,
+      cluster: this.cluster,
+      taskDefinition: taskDefinition,
+      desiredCount: 2,
+      vpcSubnets: this.ec2.vpc.selectSubnets({
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+        onePerAz: true,
+      }),
+    });
+  }
+
   private initImage(scope: Construct, resource: string, taskExecutionRole: iam.Role, s3: S3Stack, fargateService: ecs.FargateService) {
     return new EcrStack(scope,resource,taskExecutionRole,s3,fargateService);
   }
