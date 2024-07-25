@@ -11,6 +11,11 @@ import { Route53Stack } from './route53-stack';
 import { AlbStack } from './alb-stack';
 import { EcrStack } from './ecr-stack';
 import { ECS_RESOURCE_NAME } from './env/config'
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import { RDS } from './Services/DB/rdsStack';
+import { IpAddresses, Subnet, SubnetType } from 'aws-cdk-lib/aws-ec2';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 export class CdkSelflearnStack extends cdk.Stack {
@@ -36,5 +41,25 @@ export class CdkSelflearnStack extends cdk.Stack {
     );
     route53.addARecord(targetAlbRecord,'AlbARecord');
     route53.addAaaaRecord(targetAlbRecord,'AlbAAAARecord');
+
+
+
+    
+    //  //Create RDS 
+    //  const rds = new RDS(this, 'RDS', {
+    //   env:{region:"us-east-1"}, description:"RDS Stack",
+    //   vpcId:"vpc-aaaaaaaa",
+    //   dbName:"sample-db",
+    //   vpc: ec2.vpc
+    // });
+
+    // // Create a DynamoDB table
+    // const table = new dynamodb.Table(this, 'MyTable', {
+    //   partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+    //   sortKey: { name: 'sortKey', type: dynamodb.AttributeType.STRING }, // Optional: Include if you need a sort key
+    //   tableName: 'MyTable',
+    //   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // Use PAY_PER_REQUEST or PROVISIONED
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // NOT recommended for production code
+    // });
   }
 }
