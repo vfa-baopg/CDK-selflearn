@@ -14,7 +14,9 @@ export class Route53Stack {
 
   constructor(scope: Construct) {
     this.stackScope = scope;
-    const logGroup = new logs.LogGroup(scope, 'cdk-route53-log-group');
+    const logGroup = new logs.LogGroup(scope, 'cdk-route53-log-group',{
+      logGroupName: 'route53-log-group'
+    });
     const zoneName = getEnv('ROUTE53_ZONE_NAME');
     console.log(zoneName);
     if (!zoneName || zoneName.length === 0) {
