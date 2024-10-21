@@ -1,83 +1,26 @@
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import { Construct } from 'constructs';
 import { S3Stack } from './s3-stack';
 import { EC2Stack } from './ec2-stack';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { AlbStack } from './alb-stack';
-import { ApplicationProtocol } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as cdk from 'aws-cdk-lib';
+import { ECS_RESOURCE_NAME } from './env/config'
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { StackProps } from 'aws-cdk-lib';
 import { EcrStack } from './ecr-stack';
-import { Repository } from 'aws-cdk-lib/aws-ecr';
+import { S3 } from 'aws-cdk-lib/aws-ses-actions';
 
+export interface ClusterProps extends StackProps{
+  ec2: EC2Stack,
+  alb: AlbStack,
+  s3: S3Stack
+}
 
-export class ECSStack{
+export class ECSStack {
   public readonly cluster: ecs.Cluster;
-
-  private readonly ECS_RESOURCE_NAME = {
-    api: {
-      service: {
-        id: 'cdk-api-service',
-      },
-      taskDefinition: {
-        id: 'cdk-api-task-definition',
-        container: {
-          id: 'cdk-api-container',
-          image: 'cdk-api-image',
-          port: 3000,
-          protocol: ApplicationProtocol.HTTP,
-          log: 'cdk-api-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-api-target-group',
-        healthcheckPath: '/api/health',
-        pathPatterns: '/api/*',
-        priority: 1,
-      },
-    },
-    admin: {
-      service: {
-        id: 'cdk-admin-service',
-      },
-      taskDefinition: {
-        id: 'cdk-admin-task-definition',
-        container: {
-          id: 'cdk-admin-container',
-          image: 'cdk-admin-image',
-          port: 8081,
-          protocol: ApplicationProtocol.HTTPS,
-          log: 'cdk-admin-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-admin-target-group',
-        healthcheckPath: '/admin/health',
-        pathPatterns: '/admin/*',
-        priority: 2,
-      },
-    },
-    web: {
-      service: {
-        id: 'cdk-web-service',
-      },
-      taskDefinition: {
-        id: 'cdk-web-task-definition',
-        container: {
-          id: 'cdk-web-container',
-          image: 'cdk-web-image',
-          port: 80,
-          protocol: ApplicationProtocol.HTTPS,
-          log: 'cdk-web-log-group',
-        },
-      },
-      targetGroup: {
-        id: 'cdk-web-target-group',
-        healthcheckPath: '/health',
-        pathPatterns: '/*',
-        priority: 3,
-      },
-    },
-  };
 
   // Ecs service
   protected readonly apiService: ecs.FargateService;
@@ -85,118 +28,150 @@ export class ECSStack{
   protected readonly webService: ecs.FargateService;
   private readonly ec2: EC2Stack;
   private readonly alb: AlbStack;
-  private readonly ecrApi: EcrStack;
-  private readonly ecrAdmin: EcrStack;
-  private readonly ecrWeb: EcrStack;
 
-  constructor(
-    scope: Construct,
-    ec2: EC2Stack,
-    alb: AlbStack,
-    ecrApi: EcrStack,
-    ecrAdmin: EcrStack,
-    ecrWeb: EcrStack,
-    s3: S3Stack
-  ) {
+  constructor(scope: Construct,props: ClusterProps ) {
     // Create an ECS cluster
-    this.ec2 = ec2;
-    this.alb = alb;
-    this.ecrApi = ecrApi;
-    this.ecrAdmin = ecrAdmin;
-    this.ecrWeb = ecrWeb;
+    this.ec2 = props.ec2;
+    this.alb = props.alb;
     this.cluster = new ecs.Cluster(scope, 'cdk-cluster', {
+      clusterName: `Custom-Cluster`,
       vpc: this.ec2.vpc,
     });
 
-    this.apiService = this.initEcsService(scope, 'api', this.ecrApi.repository, {
-      BUCKET_NAME: s3.bucket.bucketName,
+    const taskExecutionRole = new iam.Role(scope, 'TaskExecutionRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLogsFullAccess'),
+      ],
     });
-    this.adminService = this.initEcsService(scope, 'admin', this.ecrAdmin.repository, {
-      BUCKET_NAME: s3.bucket.bucketName,
+
+
+
+    this.apiService = this.initEcsService(scope,taskExecutionRole, 'api',   props.s3, {
+      BUCKET_NAME: props.s3.bucket.bucketName,
     });
-    this.apiService = this.initEcsService(scope, 'web', this.ecrWeb.repository, {
-      BUCKET_NAME: s3.bucket.bucketName,
+    this.adminService = this.initEcsService(scope,taskExecutionRole, 'admin',   props.s3, {
+      BUCKET_NAME: props.s3.bucket.bucketName,
+    });
+    this.webService = this.initEcsService(scope,taskExecutionRole, 'web',   props.s3 ,{
+      BUCKET_NAME: props.s3.bucket.bucketName,
     });
   }
 
   /**
-   * Init resource for ecs service running
+   * Initialize ECS service
    * @param scope stack scope
-   * @param resource ecs resource initial
-   * @param containerEnv ecs container env
+   * @param resource ECS resource (api, admin, web)
+   * @param containerEnv environment variables for container
    */
   private initEcsService(
     scope: Construct,
+    taskExecutionRole: iam.Role,
     resource: 'api' | 'web' | 'admin',
-    ecrRepo: Repository,
+    s3: S3Stack,
     containerEnv?: Record<string, string>
   ) {
+
+    const resourceName = ECS_RESOURCE_NAME[resource];
     // Define Fargate task definition
     const taskDefinition = new ecs.FargateTaskDefinition(
       scope,
-      this.ECS_RESOURCE_NAME[resource].taskDefinition.id,
+      resourceName.taskDefinition.id,
       {
         memoryLimitMiB: 512,
         cpu: 256,
-      }
+        executionRole: taskExecutionRole,
+        family: resourceName.taskDefinition.id
+      },
     );
     // Add container to task definition
     const container = taskDefinition.addContainer(
-      this.ECS_RESOURCE_NAME[resource].taskDefinition.container.id,
+      resourceName.taskDefinition.container.id,
       {
-        image: ecs.ContainerImage.fromEcrRepository(ecrRepo),
+        image: ecs.ContainerImage.fromRegistry(resourceName.taskDefinition.container.image),
         logging: new ecs.AwsLogDriver({
-          streamPrefix: this.ECS_RESOURCE_NAME[resource].taskDefinition.container.log,
+          logGroup: new logs.LogGroup(scope , resourceName.taskDefinition.container.log, {
+            logGroupName: resourceName.taskDefinition.container.log,
+            removalPolicy: cdk.RemovalPolicy.DESTROY // Optional: automatically delete log group on stack deletion
+          }),
+          streamPrefix: resourceName.taskDefinition.container.log
         }),
         environment: containerEnv,
+        containerName: resourceName.taskDefinition.container.id
       }
     );
-    // taskDefinition.addToExecutionRolePolicy(s3.bucketPolicy);
 
-    // Update port mapping foreach service (api, admin, web)
+    // Update port mapping for the service
     container.addPortMappings({
-      // Container port is also host port with fargate service
-      containerPort: this.ECS_RESOURCE_NAME[resource].taskDefinition.container.port,
+      containerPort: resourceName.taskDefinition.container.port,
       protocol: ecs.Protocol.TCP,
     });
-    // const securityGroup = new ec2.SecurityGroup(scope, 'service-security-group', {
-    //   vpc: this.ec2.vpc,
-    //   allowAllOutbound: true,
-    // });
-    // Create Fargate services and attach to the target groups
-    const fargateService = new ecs.FargateService(
-      scope,
-      this.ECS_RESOURCE_NAME[resource].service.id,
+
+    // Create Fargate service and attach to the target group
+    const fargateService = this.createFargate(scope, resourceName, taskDefinition);
+
+    // Create target group and listener condition
+    this.createTargetGroup(resourceName, fargateService);
+
+    // Init Image
+    this.initImage(scope,resource, taskExecutionRole,s3, fargateService);
+    return fargateService;
+  }
+
+
+  private createTargetGroup(resourceName: { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; }, fargateService: ecs.FargateService) {
+    
+    var targetGroup = this.alb.createTargetGroup(
+      resourceName.targetGroup.id,
+      resourceName.taskDefinition.container.port,
+      this.getProtocol(resourceName.taskDefinition.container.protocol),
       {
-        cluster: this.cluster,
-        taskDefinition: taskDefinition,
-        desiredCount: 2,
-        vpcSubnets: this.ec2.vpc.selectSubnets({
-          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-          onePerAz: true,
-        }),
-        // assignPublicIp: true,
-        // securityGroups: [securityGroup],
-      }
-    );
-    const targetGroup = this.alb.createTargetGroup(
-      this.ECS_RESOURCE_NAME[resource].targetGroup.id,
-      this.ECS_RESOURCE_NAME[resource].taskDefinition.container.port,
-      this.ECS_RESOURCE_NAME[resource].taskDefinition.container.protocol,
-      {
-        path: this.ECS_RESOURCE_NAME[resource].targetGroup.healthcheckPath,
+        path: resourceName.targetGroup.healthcheckPath,
       },
       [fargateService]
     );
+
     const listenerCondition = this.alb.createListenerConditionPathPatterns([
-      this.ECS_RESOURCE_NAME[resource].targetGroup.pathPatterns,
+      resourceName.targetGroup.pathPatterns,
     ]);
+
+    // Add target group to ALB
     this.alb.addTargetGroup(
-      this.ECS_RESOURCE_NAME[resource].targetGroup.id,
+      resourceName.targetGroup.id,
       targetGroup,
-      this.ECS_RESOURCE_NAME[resource].targetGroup.priority,
+      resourceName.targetGroup.priority,
       listenerCondition
     );
-    return fargateService;
+
+  }
+
+  private createFargate(scope: Construct, resourceName: { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; } | { service: { id: string; }; taskDefinition: { id: string; container: { id: string; image: string; port: number; protocol: string; log: string; }; }; targetGroup: { id: string; healthcheckPath: string; pathPatterns: string; priority: number; }; }, taskDefinition: ecs.FargateTaskDefinition) {
+    return new ecs.FargateService(scope, resourceName.service.id, {
+      serviceName: `${resourceName.service.id}`,
+      cluster: this.cluster,
+      taskDefinition: taskDefinition,
+      desiredCount: 2,
+      vpcSubnets: this.ec2.vpc.selectSubnets({
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+        onePerAz: true,
+      }),
+    });
+  }
+
+  private initImage(scope: Construct, resource: string, taskExecutionRole: iam.Role, s3: S3Stack, fargateService: ecs.FargateService) {
+    return new EcrStack(scope,resource,taskExecutionRole,s3,fargateService);
+  }
+
+
+  private getProtocol(protocol: string): elbv2.ApplicationProtocol {
+    switch (protocol) {
+      case 'HTTP':
+        return elbv2.ApplicationProtocol.HTTP;
+      case 'HTTPS':
+        return elbv2.ApplicationProtocol.HTTPS;
+      default:
+        return elbv2.ApplicationProtocol.HTTP;
+    }
   }
 }

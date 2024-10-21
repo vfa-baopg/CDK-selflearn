@@ -10,7 +10,10 @@ export class AcmStack {
   constructor(scope: Construct, route53: Route53Stack) {
     const domainNames = getEnv('DOMAIN_NAME_LIST')?.split(',');
 
-    if (!domainNames) return;
+    if (!domainNames) {
+      console.error('DOMAIN_NAME_LIST is not set or empty');
+      return;
+    }
     const dnsMultiZone: { [key in string]: route53.PublicHostedZone } = {};
     for (const domain of domainNames) {
       dnsMultiZone[domain] = route53.publicHostedZone;

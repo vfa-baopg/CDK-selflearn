@@ -25,7 +25,9 @@ export class CloudfrontStack {
       { oacId: s3BucketOAC.getAtt('Id') }
     );
     const domainNames = getEnv('DOMAIN_NAME_LIST')?.split(',');
-    if (!domainNames) return;
+    if (!domainNames || domainNames.length === 0) {
+      throw new Error('DOMAIN_NAME_LIST environment variable is not set or is empty');
+    }
     this.distribution = new cloudfront.Distribution(scope, 'cdk-cloudfront-distribution', {
       defaultBehavior: {
         origin: s3BucketOrigin,

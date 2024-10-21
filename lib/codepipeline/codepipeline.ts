@@ -9,52 +9,41 @@ import { StackProps } from 'aws-cdk-lib';
 import { S3Stack } from '../s3-stack';
 import { EC2Stack } from '../ec2-stack';
 import { ECSStack } from '../cluster-stack';
+import { AlbStack } from '../alb-stack';
 
 export interface CodepipelineStackProps extends StackProps {
-  s3Stack?: S3Stack;
-  ec2?: EC2Stack;
-  ecrRepo?: ecr.Repository;
-  service?: ECSStack;
-  resource?: ('api' | 'web' | 'admin');
+  s3: S3Stack;
+  ec2: EC2Stack;
+  ecrRepo: ecr.Repository;
+  service: ECSStack;
+  alb: AlbStack
 }
 
-export class CodepipelineBuildDeployStack extends cdk.Stack {
+export class CodepipelineBuildDeployStack {
+
+  public readonly apiCodePipeLine: cdk.aws_codepipeline.Pipeline;
+  public readonly webCodePipeLine:  cdk.aws_codepipeline.Pipeline;
+  public readonly adminCodePipeLine:  cdk.aws_codepipeline.Pipeline;
   constructor(scope: Construct, id: string, props: CodepipelineStackProps) {
-    super(scope, id, props);
 
-    // Ensure props.resource is defined and not empty
-    const resource = props.resource ?? 'web';
+    this.apiCodePipeLine = this.initCodePipeLine(scope,props,'api');
+    this.webCodePipeLine = this.initCodePipeLine(scope,props,'web');
+    this.adminCodePipeLine = this.initCodePipeLine(scope,props,'admin');
+  }
 
-    // Create S3 bucket if not provided
-    if (props.s3Stack == undefined) {
-      props.s3Stack = new S3Stack(this);
-    }
 
-    // Create an ECR repository if not provided
-    if (props.ecrRepo == undefined) {
-      props.ecrRepo = new ecr.Repository(this, 'EcrRepository');
-    }
-
-    // Create EC2 stack if not provided
-    if (props.ec2 == undefined) {
-      props.ec2 = new EC2Stack(this);
-    }
-
-    // Create ECS service if not provided
-    if (props.service == undefined) {
-      props.service = new ECSStack(this, props.ec2, props.s3Stack);
-    }
+  private initCodePipeLine(scope: Construct, props: CodepipelineStackProps,resource: String) {
 
     // Create CodePipeline
-    const pipeline = new codepipeline.Pipeline(this, `${resource}-Pipeline`, {
-      pipelineName: `${resource}-dev`,
+    const pipeline = new codepipeline.Pipeline(scope, `${resource}-Pipeline`, {
+      pipelineName: `${resource}-Pipeline`,
     });
 
     // Add source action (S3 event)
     const sourceOutput = new codepipeline.Artifact();
     const sourceAction = new codepipelineActions.S3SourceAction({
       actionName: 'Source',
-      bucket: props.s3Stack.bucket,
+      bucket: props.s3.bucket,
       bucketKey: `${resource}/src.zip`,
       output: sourceOutput,
       trigger: codepipelineActions.S3Trigger.EVENTS,
@@ -77,7 +66,7 @@ export class CodepipelineBuildDeployStack extends cdk.Stack {
     });
 
     // Define build project
-    const buildProject = new codebuild.PipelineProject(this, `${resource}BuildProject`, {
+    const buildProject = new codebuild.PipelineProject(scope, `${resource}BuildProject`, {
       environment: {
         buildImage: codebuild.LinuxBuildImage.STANDARD_5_0,
         privileged: true,
@@ -135,7 +124,7 @@ export class CodepipelineBuildDeployStack extends cdk.Stack {
 
     // Add build stage to the pipeline
     pipeline.addStage({
-      stageName: `${resource}Build`,
+      stageName: `${resource}-Build`,
       actions: [buildAction],
     });
 
@@ -143,27 +132,27 @@ export class CodepipelineBuildDeployStack extends cdk.Stack {
     let service;
     switch(resource) {
       case 'api':
-        service = props.service?.apiService;
+        service = props.service.apiService;
         break;
       case 'web':
-        service = props.service?.webService;
+        service = props.service.webService;
         break;
       case 'admin':
-        service = props.service?.adminService;
+        service = props.service.adminService;
         break;
       default:
         throw new Error(`Unsupported resource: ${resource}`);
     }
     // Define deploy action (example deployment to ECS)
     const deployAction = new codepipelineActions.EcsDeployAction({
-      actionName: `${resource}DeployAction`,
-      service: service.service, // ECS service name determined dynamically
+      actionName: `${resource}-DeployAction`,
+      service: service, // ECS service name determined dynamically
       input: buildOutput, // Assuming buildOutput is your pipeline's build output artifact
     });
 
     // Add deploy stage to the pipeline
     pipeline.addStage({
-      stageName: `${resource}Deploy`,
+      stageName: `${resource}-Deploy`,
       actions: [deployAction],
     });
 
@@ -181,6 +170,7 @@ export class CodepipelineBuildDeployStack extends cdk.Stack {
     }));
   
     // Grant S3 bucket permissions
-    props.s3Stack.bucket.grantReadWrite(pipeline.role);
+    props.s3.bucket.grantReadWrite(pipeline.role);
+    return pipeline;
   }
 }

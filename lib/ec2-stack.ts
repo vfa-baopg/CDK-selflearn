@@ -5,8 +5,8 @@ import getEnv from '../shared/getEnv';
 export class EC2Stack {
   public readonly vpc: ec2.Vpc;
   constructor(scope: Construct) {
-    const vpcName = getEnv('VPC_NAME');
-    this.vpc = new ec2.Vpc(scope, 'cdk-vpc-learn', {
+    const vpcName = process.env.VPC_NAME;
+    this.vpc = new ec2.Vpc(scope, 'cdk-vpc', {
       vpcName,
       maxAzs: 2,
     })
